@@ -1,12 +1,16 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	vxlanPort = 4789
+
+	VID1 = 450
+	VID2 = 1000
 
 	ipProtoUDP = 0x11
 
@@ -40,9 +44,36 @@ func processDatagram(c *copier) {
 	}
 
 	sampleCount := c.copyUint32()
+	sampleCountPosition := c.dstOff
+	wrongSampleCount := 0
 	for i := uint32(0); i < sampleCount; i++ {
-		processSample(c)
+		if vlan := getVlan(c.src[c.srcOff:]); vlan == VID1 || vlan == VID2 {
+			log.Debugf("TRUE VLAN %d", vlan )
+			processSample(c)
+		} else {
+			wrongSampleCount += 1
+			c.srcOff += getSampleLength(c.src[c.srcOff:]) + 8
+		}
+		//processSample(c)
 	}
+	newSampleCount := uint32( int(sampleCount) - wrongSampleCount )
+	//log.Debugf("sampleCount %d", sampleCount )
+	//log.Debugf("newSampleCount %d", newSampleCount)
+	c.writeUint32At(newSampleCount, sampleCountPosition-4)
+}
+
+func getVlan(src []byte) int  {
+	//df := binary.BigEndian.Uint32(src[48:52])
+	//vlan := int(df)
+	//log.Debugf("vlan %d", vlan)
+	//return vlan
+	return int(binary.BigEndian.Uint32(src[48:52]))
+}
+
+func getSampleLength(src []byte) int  {
+	length := int(binary.BigEndian.Uint32(src[4:8]))
+	log.Debugf("lenght %d", length )
+	return length
 }
 
 func processSample(c *copier) {
