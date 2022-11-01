@@ -1,3 +1,9 @@
+Unlike the master branch, this release adds the ability to discard sflow samples based on VLAN (ex. check `sflow.go` file).
+
+Note: Packets with an empty data field will not be retransmitted.
+
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
 `sflow-patcher` is a lightweight sFlow proxy that strips VXLAN headers from the sFlow raw packet records, keeping all other records and counters intact. All UDP packets that `sflow-patcher` failed to parse as sFlow datagrams are relayed as is. UDP source addresses and ports are preserved in order to provide compatibility with sFlow analyzers thar rely on source IP instead of agendId value.
 
 The VXLAN header detection is dead-simple: `sflow-patcher` goes through the raw packet record headers and checks if the packet happens to be a UDP packet with destination port 4789.
