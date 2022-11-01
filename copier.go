@@ -152,15 +152,20 @@ func (c *copier) readUint32() uint32 {
 // processes sflow datagram from the source slice
 // into the destination slice
 func (c *copier) process() (data []byte) {
+	var processedSampleCount uint32 = 1
 	defer func() {
 		if r := recover(); r != nil {
 			log.Warnf("Failed to parse datagram: %s", r)
 			log.Debugf("panic: %s\n%s", r, string(debug.Stack()))
 			data = c.sourceBytes()
 		} else {
-			data = c.processedBytes()
+			if processedSampleCount == 0 {
+				log.Debugf("slice data due to empty samples")
+			} else {
+				data = c.processedBytes()
+			}
 		}
 	}()
-	processDatagram(c)
+	processedSampleCount = processDatagram(c)
 	return
 }

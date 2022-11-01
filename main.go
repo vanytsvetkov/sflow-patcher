@@ -56,8 +56,12 @@ func runWorker(conn *net.UDPConn, writer *pcapWriter, wg *sync.WaitGroup) {
 		log.Debugf("Received %d bytes from %s", n, addr)
 
 		data := c.process()
-		if err := writer.write(addr, data); err != nil {
-			log.Error(err)
+		if len(data) != 0 {
+			if err := writer.write(addr, data); err != nil {
+				log.Error(err)
+			}
+		} else {
+			log.Debugf("drop packet with wrong sflow data lenght")
 		}
 	}
 	wg.Done()
