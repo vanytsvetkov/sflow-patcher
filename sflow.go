@@ -6,12 +6,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var VIDs = map[int]bool{
-	0:    true,
-	450:  true,
-	1000: true,
-}
-
 const (
 	vxlanPort = 4789
 
@@ -38,12 +32,16 @@ func processDatagram(c *copier) uint32 {
 	case 1:
 		// Copy IPv4 address (4 bytes), agentID (4 bytes),
 		// sequenceNumber (4 bytes), agentUptime (4 bytes)
-		sequenceNumber = getSequenceNumber(c.src[c.srcOff:], 8, 8+4)
+		if flagDebugEnabled {
+			sequenceNumber = getSequenceNumber(c.src[c.srcOff:], 8, 8+4)
+		}
 		c.copyBytes(16)
 	case 2:
 		// Copy IPv6 address (16 bytes), agentID (4 bytes),
 		// sequenceNumber (4 bytes), agentUptime (4 bytes)
-		sequenceNumber = getSequenceNumber(c.src[c.srcOff:], 20, 20+4)
+		if flagDebugEnabled {
+			sequenceNumber = getSequenceNumber(c.src[c.srcOff:], 20, 20+4)
+		}
 		c.copyBytes(28)
 	default:
 		panic(fmt.Sprintf("Unsupported agent address type %d", at))
@@ -55,22 +53,48 @@ func processDatagram(c *copier) uint32 {
 	sampleCountPosition := c.dstOff
 	wrongSampleCount := 0
 	for i := uint32(0); i < sampleCount; i++ {
-		if vlan := getVlan(c.src[c.srcOff:]); VIDs[vlan] {
-			log.Debugf("pass sflow sample with VID %d", vlan)
+		toProcess := false
+		if getSampleFormat(c.src[c.srcOff:]) == 1 {
+			if vlan := getVlan(c.src[c.srcOff:]); vlanMapLookup(vlan) {
+				log.Debugf("pass sflow sample with VID %d", vlan)
+				toProcess = true
+			} else {
+				log.Debugf("drop sflow sample with VID %d", vlan)
+			}
+		} else {
+			toProcess = true
+		}
+
+		if toProcess {
 			processSample(c)
 		} else {
-			log.Debugf("drop sflow sample with VID %d", vlan)
 			wrongSampleCount += 1
 			c.srcOff += getSampleLength(c.src[c.srcOff:]) + 8
 		}
+
+		//if vlan := getVlan(c.src[c.srcOff:]); vlanMapLookup(vlan) || getSampleFormat(c.src[c.srcOff:]) != 1 {
+		//	log.Debugf("pass sflow sample with VID %d", vlan)
+		//	processSample(c)
+		//} else {
+		//	log.Debugf("drop sflow sample with VID %d", vlan)
+		//	wrongSampleCount += 1
+		//	c.srcOff += getSampleLength(c.src[c.srcOff:]) + 8
+		//}
 	}
 	newSampleCount := uint32(int(sampleCount) - wrongSampleCount)
 	c.writeUint32At(newSampleCount, sampleCountPosition-4)
 	return newSampleCount
 }
 
-func getVlan(src []byte) int {
-	return int(binary.BigEndian.Uint32(src[48:52]))
+func getSampleFormat(src []byte) uint32 {
+	df := binary.BigEndian.Uint32(src[:8])
+	dataType := uint32(0xFFF) & uint32(df)
+	log.Debugf("format: %d", dataType)
+	return dataType
+}
+
+func getVlan(src []byte) uint32 {
+	return binary.BigEndian.Uint32(src[48:52])
 }
 
 func getSequenceNumber(src []byte, x int, y int) int {

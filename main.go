@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var flagVlanPath string
 var flagRouteMapPath string
 var flagListenAddr string
 var flagOutIf string
@@ -27,6 +28,9 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&flagRouteMapPath, "route-map", "r", "", "path to the collector route map file")
 	rootCmd.MarkPersistentFlagRequired("route-map")
+
+	rootCmd.PersistentFlags().StringVarP(&flagVlanPath, "vlan-map", "v", "", "path to the vlan map file")
+	rootCmd.MarkPersistentFlagRequired("vlan-map")
 
 	rootCmd.PersistentFlags().StringVarP(&flagOutIf, "out-if", "i", "", "outgoing interface")
 	rootCmd.MarkPersistentFlagRequired("out-if")
@@ -67,7 +71,7 @@ func runWorker(conn *net.UDPConn, writer *pcapWriter, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-// Reload route map on SIGHUP, stop UDP server on SIGINT/SIGTERM
+// Reload route & vlan maps on SIGHUP, stop UDP server on SIGINT/SIGTERM
 func signalHandler(server net.PacketConn) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
@@ -75,8 +79,11 @@ func signalHandler(server net.PacketConn) {
 		sig := <-sigCh
 		switch sig {
 		case syscall.SIGHUP:
-			log.Info("SIGHUP received, reloading route map")
+			log.Info("SIGHUP received, reloading route & vlan maps")
 			if err := routeMapReload(); err != nil {
+				log.Error(err)
+			}
+			if err := vlanMapReload(); err != nil {
 				log.Error(err)
 			}
 		case os.Interrupt, syscall.SIGTERM:
@@ -94,6 +101,9 @@ func rootCmdHandler(_ *cobra.Command, _ []string) {
 	}
 
 	if err := routeMapReload(); err != nil {
+		log.Fatal(err)
+	}
+	if err := vlanMapReload(); err != nil {
 		log.Fatal(err)
 	}
 
